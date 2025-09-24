@@ -7,7 +7,7 @@
 #SBATCH --output=/data/smcc417/output.log
 #SBATCH --error=/data/smcc417/error.log
 #SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=8
+#SBATCH --cpus-per-task=10
 
 # ======== Job Execution Steps ========
 
