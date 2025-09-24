@@ -182,10 +182,7 @@ class VQSegmentationModel(VQModel):
         x = self.get_input(batch, self.image_key)
         xrec, qloss = self(x)
         aeloss, log_dict_ae = self.loss(qloss, x, xrec, split="val")
-        self.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-        total_loss = log_dict_ae["val/total_loss"]
-        self.log("val/total_loss", total_loss,
-                 prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True)
+        self.log_dict(log_dict_ae, prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True)
         return aeloss
 
     @torch.no_grad()

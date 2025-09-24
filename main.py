@@ -10,6 +10,8 @@ from pytorch_lightning import seed_everything
 from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, Callback, LearningRateMonitor
 from pytorch_lightning.utilities import rank_zero_only
+from pytorch_lightning.loggers import TensorBoardLogger
+import wandb
 
 from taming.data.utils import custom_collate
 
@@ -102,8 +104,20 @@ def get_parser(**parser_kwargs):
         default="",
         help="post-postfix for default name",
     )
+    parser.add_argument(
+        "--precision",
+        type=str,
+        default="medium",
+        help="medium, high"
+    )
 
-    return parser
+    # PL Trainer args
+    PL_ARGS = ["accelerator", "devices", "max_epochs"]
+    parser.add_argument("--accelerator", type=str, default="gpu")
+    parser.add_argument("--devices", type=str, default="1")
+    parser.add_argument("--max_epochs", type=int, default=100000)
+
+    return parser, PL_ARGS
 
 
 def nondefault_trainer_args(opt):
@@ -222,7 +236,7 @@ class ImageLogger(Callback):
         self.max_images = max_images
         self.logger_log_images = {
             pl.loggers.WandbLogger: self._wandb,
-            pl.loggers.TestTubeLogger: self._testtube,
+            # pl.loggers.TestTubeLogger: self._testtube,
         }
         self.log_steps = [2 ** n for n in range(int(np.log2(self.batch_freq)) + 1)]
         if not increase_log_steps:
@@ -231,12 +245,15 @@ class ImageLogger(Callback):
 
     @rank_zero_only
     def _wandb(self, pl_module, images, batch_idx, split):
-        raise ValueError("No way wandb")
-        grids = dict()
-        for k in images:
-            grid = torchvision.utils.make_grid(images[k])
+        grids = {}
+        for k, img_tensor in images.items():
+            grid = torchvision.utils.make_grid(img_tensor)  # C,H,W, float [-1,1] or [0,1]
+            # Clamp and rescale to [0,255] uint8
+            grid = torch.clamp(grid, -1.0, 1.0)
+            grid = ((grid + 1.0) / 2.0 * 255).to(torch.uint8)
             grids[f"{split}/{k}"] = wandb.Image(grid)
-        pl_module.logger.experiment.log(grids)
+        if hasattr(pl_module.logger, "experiment") and pl_module.logger.experiment is not None:
+            pl_module.logger.experiment.log(grids, step=pl_module.global_step)
 
     @rank_zero_only
     def _testtube(self, pl_module, images, batch_idx, split):
@@ -309,11 +326,12 @@ class ImageLogger(Callback):
             return True
         return False
 
-    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         self.log_img(pl_module, batch, batch_idx, split="train")
 
-    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx):
+    def on_validation_batch_end(self, trainer, pl_module, outputs, batch, batch_idx, dataloader_idx=0):
         self.log_img(pl_module, batch, batch_idx, split="val")
+
 
 
 
@@ -366,10 +384,12 @@ if __name__ == "__main__":
     # (in particular `main.DataModuleFromConfig`)
     sys.path.append(os.getcwd())
 
-    parser = get_parser()
-    parser = Trainer.add_argparse_args(parser)
+    parser, PL_ARGS = get_parser()
 
     opt, unknown = parser.parse_known_args()
+
+    torch.set_float32_matmul_precision(opt.precision)
+
     if opt.name and opt.resume:
         raise ValueError(
             "-n/--name and -r/--resume cannot be specified both."
@@ -419,15 +439,13 @@ if __name__ == "__main__":
         # merge trainer cli with config
         trainer_config = lightning_config.get("trainer", OmegaConf.create())
         # default to ddp
-        trainer_config["distributed_backend"] = "ddp"
-        for k in nondefault_trainer_args(opt):
-            trainer_config[k] = getattr(opt, k)
-        if not "gpus" in trainer_config:
-            del trainer_config["distributed_backend"]
+        trainer_config["accelerator"] = "gpu"
+        trainer_config["strategy"] = "ddp"
+        if "devices" not in trainer_config:
+            trainer_config["accelerator"] = "cpu"
             cpu = True
         else:
-            gpuinfo = trainer_config["gpus"]
-            print(f"Running on GPUs {gpuinfo}")
+            print(f"Running on devices {trainer_config['devices']}")
             cpu = False
         trainer_opt = argparse.Namespace(**trainer_config)
         lightning_config.trainer = trainer_config
@@ -437,6 +455,10 @@ if __name__ == "__main__":
 
         # trainer and callbacks
         trainer_kwargs = dict()
+        for k in PL_ARGS:
+            v = getattr(opt, k, None)
+            if v is not None:
+                trainer_kwargs[k] = v
 
         # default logger configs
         # NOTE wandb < 0.10.0 interferes with shutdown
@@ -461,8 +483,8 @@ if __name__ == "__main__":
                 }
             },
         }
-        default_logger_cfg = default_logger_cfgs["testtube"]
-        logger_cfg = lightning_config.logger or OmegaConf.create()
+        default_logger_cfg = default_logger_cfgs["wandb"]
+        logger_cfg = getattr(lightning_config, "logger", OmegaConf.create())
         logger_cfg = OmegaConf.merge(default_logger_cfg, logger_cfg)
         trainer_kwargs["logger"] = instantiate_from_config(logger_cfg)
 
@@ -482,9 +504,10 @@ if __name__ == "__main__":
             default_modelckpt_cfg["params"]["monitor"] = model.monitor
             default_modelckpt_cfg["params"]["save_top_k"] = 3
 
-        modelckpt_cfg = lightning_config.modelcheckpoint or OmegaConf.create()
+        modelckpt_cfg = lightning_config.get("modelcheckpoint", OmegaConf.create())
         modelckpt_cfg = OmegaConf.merge(default_modelckpt_cfg, modelckpt_cfg)
-        trainer_kwargs["checkpoint_callback"] = instantiate_from_config(modelckpt_cfg)
+        trainer_kwargs.setdefault("callbacks", [])
+        trainer_kwargs["callbacks"].append(instantiate_from_config(modelckpt_cfg))
 
         # add callback which sets up log directory
         default_callbacks_cfg = {
@@ -516,12 +539,13 @@ if __name__ == "__main__":
                 }
             },
         }
-        callbacks_cfg = lightning_config.callbacks or OmegaConf.create()
+        callbacks_cfg = getattr(lightning_config, "callbacks", OmegaConf.create())
         callbacks_cfg = OmegaConf.merge(default_callbacks_cfg, callbacks_cfg)
         trainer_kwargs["callbacks"] = [instantiate_from_config(callbacks_cfg[k]) for k in callbacks_cfg]
 
-        trainer = Trainer.from_argparse_args(trainer_opt, **trainer_kwargs)
-
+        trainer = Trainer(
+            **trainer_kwargs
+        )
         # data
         data = instantiate_from_config(config.data)
         # NOTE according to https://pytorch-lightning.readthedocs.io/en/latest/datamodules.html
@@ -536,7 +560,7 @@ if __name__ == "__main__":
             ngpu = len(lightning_config.trainer.gpus.strip(",").split(','))
         else:
             ngpu = 1
-        accumulate_grad_batches = lightning_config.trainer.accumulate_grad_batches or 1
+        accumulate_grad_batches = getattr(lightning_config.trainer, "accumulate_grad_batches", 1)
         print(f"accumulate_grad_batches = {accumulate_grad_batches}")
         lightning_config.trainer.accumulate_grad_batches = accumulate_grad_batches
         model.learning_rate = accumulate_grad_batches * ngpu * bs * base_lr

@@ -1,23 +1,24 @@
-# --- PyTorch stack (CUDA 11.0) ---
-torch==1.7.1+cu110
-torchvision==0.8.2+cu110
-torchaudio==0.7.2
--f https://download.pytorch.org/whl/torch_stable.html
+# --- PyTorch stack (CUDA 12.x) ---
+torch==2.8.0
+torchvision==0.23.0
+torchaudio==2.8.0
 
 # --- Core dependencies ---
-numpy==1.19.2
-albumentations==0.4.3
-opencv-python==4.1.2.30
-pudb==2019.2
-imageio==2.9.0
-imageio-ffmpeg==0.4.2
-pytorch-lightning==1.0.8
-omegaconf==2.0.0
-test-tube>=0.7.5
-streamlit>=0.73.1
-einops==0.3.0
-more-itertools>=8.0.0
-transformers==4.3.1
+numpy>=2.0.0
+albumentations>=1.4.8
+opencv-python>=4.10.0.84
+pudb>=2024.1
+imageio>=2.35.1
+imageio-ffmpeg>=0.5.1
+pytorch-lightning>=2.4.0
+omegaconf>=2.3.0
+# test-tube is deprecated, usually replaced by pytorch-lightning loggers
+# test-tube>=0.7.5
+streamlit>=1.37.0
+einops>=0.8.0
+more-itertools>=10.5.0
+transformers>=4.44.2
+wandb>=0.12.10
 
 # --- Local package (the repo itself) ---
 -e .
