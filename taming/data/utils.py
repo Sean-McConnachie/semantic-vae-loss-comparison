@@ -126,21 +126,14 @@ def custom_collate(batch):
     elem = batch[0]
     elem_type = type(elem)
     if isinstance(elem, torch.Tensor):
-        out = None
-        if torch.utils.data.get_worker_info() is not None:
-            # If in a background process, create a shared memory tensor with the
-            # correct shape to avoid a copy and the resizing warning.
-            shape = (len(batch), *elem.shape)
-            out = torch.empty(shape, dtype=elem.dtype, device=elem.device).share_memory_()
-        return torch.stack(batch, 0, out=out)
+        return torch.stack(batch, 0)
     # if isinstance(elem, torch.Tensor):
     #     out = None
     #     if torch.utils.data.get_worker_info() is not None:
-    #         # If we're in a background process, concatenate directly into a
-    #         # shared memory tensor to avoid an extra copy
-    #         numel = sum([x.numel() for x in batch])
-    #         storage = elem.storage()._new_shared(numel)
-    #         out = elem.new(storage)
+    #         # If in a background process, create a shared memory tensor with the
+    #         # correct shape to avoid a copy and the resizing warning.
+    #         shape = (len(batch), *elem.shape)
+    #         out = torch.empty(shape, dtype=elem.dtype, device=elem.device).share_memory_()
     #     return torch.stack(batch, 0, out=out)
     elif elem_type.__module__ == 'numpy' and elem_type.__name__ != 'str_' \
             and elem_type.__name__ != 'string_':

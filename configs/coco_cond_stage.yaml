@@ -32,7 +32,7 @@ model:
 data:
   target: main.DataModuleFromConfig
   params:
-    num_workers: 2
+    num_workers: 1
     batch_size: 6
     train:
       target: taming.data.coco.CocoImagesAndCaptionsTrain
