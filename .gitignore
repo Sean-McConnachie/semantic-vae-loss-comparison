@@ -1,4 +1,5 @@
 .vscode/
+context.md
 ComfyUI
 **/**/generated_clips/
 **/**/checkpoint/
