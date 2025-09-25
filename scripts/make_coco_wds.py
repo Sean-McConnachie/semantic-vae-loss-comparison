@@ -2,7 +2,7 @@ import os
 import webdataset as wds
 from main import instantiate_from_config, DataModuleFromConfig
 from omegaconf import OmegaConf
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 import json
 
 OUTPUT_DIR = "data/cocostuffthings_wds"
