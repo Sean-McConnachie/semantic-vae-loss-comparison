@@ -19,6 +19,7 @@ einops>=0.8.0
 more-itertools>=10.5.0
 transformers>=4.44.2
 wandb>=0.12.10
+webdataset==1.0.2
 
 # --- Local package (the repo itself) ---
 -e .
