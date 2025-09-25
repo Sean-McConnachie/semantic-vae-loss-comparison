@@ -1,4 +1,5 @@
 .vscode/
+runs/
 context.md
 ComfyUI
 **/**/generated_clips/
