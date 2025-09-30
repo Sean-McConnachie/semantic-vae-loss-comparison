@@ -2,7 +2,7 @@
 
 # ======== SLURM Job Configuration ========
 #SBATCH --job-name=vqgan-seg
-#SBATCH --time=10:00:00                   # [REQUIRED] Wall time limit in HH:MM:SS
+#SBATCH --time=24:00:00                   # [REQUIRED] Wall time limit in HH:MM:SS
 #SBATCH --open-mode=append
 #SBATCH --output=/data/smcc417/taming-transformers/runs/output.log
 #SBATCH --error=/data/smcc417/taming-transformers/runs/error.log
@@ -11,8 +11,10 @@
 
 # ======== Job Execution Steps ========
 
+export WANDB_PROJECT=cluster
+
 # Navigate to the working directory where your code and virtual environment are located
 source /home/smcc417/.bashrc
 cd /data/smcc417/taming-transformers
 conda activate taming
-python main.py --base configs/coco_cond_stage.yaml --gpus 0, -t True
+python main.py --base $1 --gpus 0, -t True --max_epochs 10
