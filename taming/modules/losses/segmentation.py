@@ -40,7 +40,6 @@ class CELossWithQuant(nn.Module):
         }
         return loss, log_dict
 
-
 # class FocalBCELossWithQuant(nn.Module):
 #     def __init__(self, codebook_weight=1., gamma=2.0, alpha=1.0):
 #         super().__init__()
