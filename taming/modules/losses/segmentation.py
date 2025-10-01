@@ -82,6 +82,8 @@ class CEDiceLossWithQuant(nn.Module):
 
         log_dict = {
             f"{split}/total_loss": loss.clone().detach().mean(),
+            f"{split}/ce_loss": ce_loss.detach().mean(),
+            f"{split}/dice_loss": dice_loss.detach().mean(),
             f"{split}/ce_dice_loss": ce_dice_loss.detach().mean(),
             f"{split}/quant_loss": qloss.detach().mean()
         }
