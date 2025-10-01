@@ -20,6 +20,7 @@ more-itertools>=10.5.0
 transformers>=4.44.2
 wandb>=0.12.10
 webdataset==1.0.2
+matplotlib
 
 # --- Local package (the repo itself) ---
 -e .

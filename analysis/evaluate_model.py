@@ -161,6 +161,7 @@ def main(
     results_file: str = "results.csv"
 ):
     # load data loader
+    print("loading data...")
     data: DataModuleFromConfig = instantiate_from_config(data_cfg)
     data.prepare_data()
     data.setup()
@@ -168,10 +169,12 @@ def main(
     val_ldr = data.val_dataloader()
 
     # load labels
+    print("loading labels...")
     with open("data/cocostuffthings/labels.txt", "r") as f:
         labels = [line.strip().split(": ")[1] for line in f.readlines()]
 
     # create model and load checkpoint
+    print("loading model...")
     model = VQSegmentationModel(**model_cfg)
     sd = torch.load(ckpt_path, map_location="cpu")["state_dict"]
     missing, unexpected = model.load_state_dict(sd, strict=False)
@@ -179,6 +182,7 @@ def main(
     torch.set_grad_enabled(False)
 
     # reconstruct all validation images
+    print("reconstructing validation set...")
     xs = []
     xrecs = []
     for i, batch in enumerate(tqdm(val_ldr)):
@@ -202,18 +206,27 @@ def main(
     xrecs = torch.cat(xrecs, dim=0)
 
     # calculate metrics
+    print("calculating metrics...")
     results = {}
     results["run_name"] = run_name
     results["ckpt_path"] = ckpt_path
+    print("calculating mIoU...")
     results["mIoU_macro"] = calculate_miou(xrecs, xs, num_classes=183, average='macro')
+    print("calculating accuracy...")
     results["accuracy_macro"] = calculate_accuracy(xrecs, xs, num_classes=183, average='macro').item()
+    print("calculating f1...")
     results["f1_macro"] = calculate_f1(xrecs, xs, num_classes=183, average='macro')
+    print("calculating precision...")
     results["precision_macro"] = calculate_precision(xrecs, xs, num_classes=183, average='macro')
+    print("calculating recall...")
     results["recall_macro"] = calculate_recall(xrecs, xs, num_classes=183, average='macro')
+    print("calculating per class accuracy...")
     per_class_accuracy = calculate_accuracy(xrecs, xs, num_classes=183, average=None)
     for i in range(len(labels)):
         results[f"acc_{labels[i]}"] = per_class_accuracy[i].item()
 
+    # save results
+    print("writing results...")
     write_header = not os.path.exists(results_file)
     with open(results_file, "a") as f:
         writer = csv.DictWriter(f, fieldnames=list(results.keys()))
@@ -221,12 +234,14 @@ def main(
             writer.writeheader()
         writer.writerow(results)
 
+    print("done.")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--run_name", type=str, required=True)
     parser.add_argument("--ckpt_path", type=str, required=True)
-    parser.add_argument("--results_file", type=str, default="results.csv")
+    parser.add_argument("--results_file", type=str, default="analysis/results.csv")
     args = parser.parse_args()
 
     data_cfg = OmegaConf.create(DATA_CONFIG)
