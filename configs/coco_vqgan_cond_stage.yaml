@@ -31,7 +31,8 @@ model:
         base_loss_params:
           codebook_weight: 1.0
         disc_in_channels: 183
-        disc_start: 2000 # roughly 1 epoch at batch_size = 48
+        # disc_start: 2000 # roughly 1 epoch at batch_size = 48
+        disc_start: 0
 
 data:
   target: main.DataModuleFromConfig

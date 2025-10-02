@@ -2,7 +2,7 @@
 
 # ======== SLURM Job Configuration ========
 #SBATCH --job-name=vqgan-seg
-#SBATCH --time=24:00:00                   # [REQUIRED] Wall time limit in HH:MM:SS
+#SBATCH --time=24:00:00
 #SBATCH --open-mode=append
 #SBATCH --output=/data/smcc417/taming-transformers/runs/output.log
 #SBATCH --error=/data/smcc417/taming-transformers/runs/error.log
@@ -11,9 +11,16 @@
 
 # ======== Job Execution Steps ========
 
-export WANDB_PROJECT=cluster
+# Set default WANDB project
+WANDB_PROJECT="cluster"
 
-# Navigate to the working directory where your code and virtual environment are located
+if [ "$2" == "testing" ]; then
+  WANDB_PROJECT="testing"
+fi
+
+export WANDB_PROJECT
+
+# Navigate to the working directory and run the script
 source /home/smcc417/.bashrc
 cd /data/smcc417/taming-transformers
 conda activate taming

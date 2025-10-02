@@ -10,19 +10,20 @@ from taming.modules.vqvae.quantize import GumbelQuantize
 from taming.modules.vqvae.quantize import EMAVectorQuantizer
 
 class VQModel(pl.LightningModule):
-    def __init__(self,
-                 ddconfig,
-                 lossconfig,
-                 n_embed,
-                 embed_dim,
-                 ckpt_path=None,
-                 ignore_keys=[],
-                 image_key="image",
-                 colorize_nlabels=None,
-                 monitor=None,
-                 remap=None,
-                 sane_index_shape=False,  # tell vector quantizer to return indices as bhw
-                 ):
+    def __init__(
+        self,
+        ddconfig,
+        lossconfig,
+        n_embed,
+        embed_dim,
+        ckpt_path=None,
+        ignore_keys=[],
+        image_key="image",
+        colorize_nlabels=None,
+        monitor=None,
+        remap=None,
+        sane_index_shape=False,  # tell vector quantizer to return indices as bhw
+    ):
         super().__init__()
         self.image_key = image_key
         self.encoder = Encoder(**ddconfig)
@@ -40,6 +41,7 @@ class VQModel(pl.LightningModule):
             self.register_buffer("colorize", torch.randn(3, colorize_nlabels, 1, 1))
         if monitor is not None:
             self.monitor = monitor
+        self.automatic_optimization = False # pytorch lightning 2.x requires this for multiple optimizers
 
     def init_from_ckpt(self, path, ignore_keys=list()):
         sd = torch.load(path, map_location="cpu")["state_dict"]
@@ -80,55 +82,68 @@ class VQModel(pl.LightningModule):
         x = x.permute(0, 3, 1, 2).to(memory_format=torch.contiguous_format, non_blocking=True)
         return x.float()
 
-    def training_step(self, batch, batch_idx, optimizer_idx):
+    def training_step(self, batch, batch_idx):
         x = self.get_input(batch, self.image_key)
         xrec, qloss = self(x)
 
-        if optimizer_idx == 0:
-            # autoencode
-            aeloss, log_dict_ae = self.loss(qloss, x, xrec, optimizer_idx, self.global_step,
-                                            last_layer=self.get_last_layer(), split="train")
+        opt_ae, opt_disc = self.optimizers()
 
-            self.log("train/aeloss", aeloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-            self.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-            return aeloss
+        # autoencode
+        aeloss, log_dict_ae = self.loss(
+            qloss, x, xrec, 0, self.global_step,
+            last_layer=self.get_last_layer(), split="train"
+        )
+        opt_ae.zero_grad()
+        self.manual_backward(aeloss)
+        opt_ae.step()
 
-        if optimizer_idx == 1:
-            # discriminator
-            discloss, log_dict_disc = self.loss(qloss, x, xrec, optimizer_idx, self.global_step,
-                                            last_layer=self.get_last_layer(), split="train")
-            self.log("train/discloss", discloss, prog_bar=True, logger=True, on_step=True, on_epoch=True)
-            self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
-            return discloss
+        self.log_dict(log_dict_ae, prog_bar=False, logger=True, on_step=True, on_epoch=True)
+
+        # discriminator
+        discloss, log_dict_disc = self.loss(
+            qloss, x, xrec, 1, self.global_step,
+            last_layer=self.get_last_layer(), split="train"
+        )
+        
+        opt_disc.zero_grad()
+        self.manual_backward(discloss)
+        opt_disc.step()
+
+        self.log_dict(log_dict_disc, prog_bar=False, logger=True, on_step=True, on_epoch=True)
+
+        return {"aeloss": aeloss, "discloss": discloss}
 
     def validation_step(self, batch, batch_idx):
         x = self.get_input(batch, self.image_key)
         xrec, qloss = self(x)
-        aeloss, log_dict_ae = self.loss(qloss, x, xrec, 0, self.global_step,
-                                            last_layer=self.get_last_layer(), split="val")
+        aeloss, log_dict_ae = self.loss(
+            qloss, x, xrec, 0, self.global_step,
+            last_layer=self.get_last_layer(), split="val"
+        )
 
-        discloss, log_dict_disc = self.loss(qloss, x, xrec, 1, self.global_step,
-                                            last_layer=self.get_last_layer(), split="val")
-        rec_loss = log_dict_ae["val/rec_loss"]
-        self.log("val/rec_loss", rec_loss,
-                   prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True)
-        self.log("val/aeloss", aeloss,
-                   prog_bar=True, logger=True, on_step=True, on_epoch=True, sync_dist=True)
+        discloss, log_dict_disc = self.loss(
+            qloss, x, xrec, 1, self.global_step,
+            last_layer=self.get_last_layer(), split="val"
+        )
         self.log_dict(log_dict_ae)
         self.log_dict(log_dict_disc)
         return self.log_dict
 
     def configure_optimizers(self):
         lr = self.learning_rate
-        opt_ae = torch.optim.Adam(list(self.encoder.parameters())+
-                                  list(self.decoder.parameters())+
-                                  list(self.quantize.parameters())+
-                                  list(self.quant_conv.parameters())+
-                                  list(self.post_quant_conv.parameters()),
-                                  lr=lr, betas=(0.5, 0.9))
-        opt_disc = torch.optim.Adam(self.loss.discriminator.parameters(),
-                                    lr=lr, betas=(0.5, 0.9))
-        return [opt_ae, opt_disc], []
+        opt_ae = torch.optim.Adam(
+            list(self.encoder.parameters()) +
+            list(self.decoder.parameters()) +
+            list(self.quantize.parameters()) +
+            list(self.quant_conv.parameters()) +
+            list(self.post_quant_conv.parameters()),
+            lr=lr, betas=(0.5, 0.9)
+        )
+        opt_disc = torch.optim.Adam(
+            self.loss.discriminator.parameters(),
+            lr=lr, betas=(0.5, 0.9)
+        )
+        return [opt_ae, opt_disc]
 
     def get_last_layer(self):
         return self.decoder.conv_out.weight
