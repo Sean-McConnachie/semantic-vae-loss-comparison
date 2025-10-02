@@ -1,6 +1,6 @@
 model:
   base_learning_rate: 4.5e-06
-  target: taming.models.vqgan.VQSegmentationModel
+  target: taming.models.vqgan.VQGANSegmentationModel
   params:
     embed_dim: 256
     n_embed: 1024
