@@ -27,8 +27,8 @@ model:
     lossconfig:
       target: taming.modules.losses.segmentation.CEDiceLossWithQuant
       params:
-        ce_weight: 0.5
-        dice_weight: 0.5
+        ce_weight: 1.0
+        dice_weight: 1.0
         codebook_weight: 1.0
         num_classes: 183
 

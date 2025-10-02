@@ -8,7 +8,6 @@ class BCELoss(nn.Module):
         loss = F.binary_cross_entropy_with_logits(prediction,target)
         return loss, {}
 
-
 class BCELossWithQuant(nn.Module):
     def __init__(self, codebook_weight=1.0):
         super().__init__()
@@ -51,38 +50,37 @@ class CEDiceLossWithQuant(nn.Module):
         self.num_classes = num_classes
         self.smooth = smooth
 
-    def forward(self, qloss, prediction, target, split):
+    def forward(self, qloss, target, prediction, split):
         target_indices = torch.argmax(target, dim=1)
         ce_loss = F.cross_entropy(prediction, target_indices)
 
-        # probs = F.softmax(prediction, dim=1)
-        # target_one_hot = F.one_hot(target_indices, num_classes=self.num_classes)
-        # target_one_hot = torch.moveaxis(target_one_hot, -1, 1).float()
+        probs = F.softmax(prediction, dim=1)
+        target_one_hot = F.one_hot(target_indices, num_classes=self.num_classes)
+        target_one_hot = torch.moveaxis(target_one_hot, -1, 1).float()
 
-        # dice_score = 0.0
-        # for i in range(self.num_classes):
-        #     p_class = probs[:, i]
-        #     t_class = target_one_hot[:, i]
+        dice_score = 0.0
+        for i in range(self.num_classes):
+            p_class = probs[:, i]
+            t_class = target_one_hot[:, i]
 
-        #     intersection = (p_class * t_class).sum()
-        #     union = p_class.sum() + t_class.sum()
+            intersection = (p_class * t_class).sum()
+            union = p_class.sum() + t_class.sum()
 
-        #     class_score = (2. * intersection + self.smooth) / (union + self.smooth)
-        #     dice_score += class_score
+            class_score = (2. * intersection + self.smooth) / (union + self.smooth)
+            dice_score += class_score
 
-        # mean_dice_score = dice_score / self.num_classes
-        # dice_loss = 1 - mean_dice_score
+        mean_dice_score = dice_score / self.num_classes
+        dice_loss = 1 - mean_dice_score
 
-        # ce_dice_loss = (self.ce_weight * ce_loss) + (self.dice_weight * dice_loss)
+        ce_dice_loss = (self.ce_weight * ce_loss) + (self.dice_weight * dice_loss)
 
-        # loss = ce_dice_loss + self.codebook_weight * qloss
-        loss = ce_loss + self.codebook_weight * qloss
+        loss = ce_dice_loss + self.codebook_weight * qloss
 
         log_dict = {
             f"{split}/total_loss": loss.clone().detach().mean(),
             f"{split}/ce_loss": ce_loss.detach().mean(),
-            # f"{split}/dice_loss": dice_loss.detach().mean(),
-            # f"{split}/ce_dice_loss": ce_dice_loss.detach().mean(),
+            f"{split}/dice_loss": dice_loss.detach().mean(),
+            f"{split}/ce_dice_loss": ce_dice_loss.detach().mean(),
             f"{split}/quant_loss": qloss.detach().mean()
         }
 
