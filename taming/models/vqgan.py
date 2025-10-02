@@ -156,6 +156,30 @@ class VQModel(pl.LightningModule):
         return x
 
 
+class VQGANSegmentationModel(VQModel):
+    def __init__(self, n_labels, *args, **kwargs):
+        super().__init__(colorize_nlabels=n_labels, *args, **kwargs)
+
+    @torch.no_grad()
+    def log_images(self, batch, **kwargs):
+        log = dict()
+        x = self.get_input(batch, self.image_key)
+        x = x.to(self.device)
+        xrec, _ = self(x)
+        if x.shape[1] > 3:
+            # colorize with random projection
+            assert xrec.shape[1] > 3
+            # convert logits to indices
+            xrec = torch.argmax(xrec, dim=1, keepdim=True)
+            xrec = F.one_hot(xrec, num_classes=x.shape[1])
+            xrec = xrec.squeeze(1).permute(0, 3, 1, 2).float()
+            x = self.to_rgb(x)
+            xrec = self.to_rgb(xrec)
+        log["inputs"] = x
+        log["reconstructions"] = xrec
+        return log
+
+
 class VQSegmentationModel(VQModel):
     def __init__(self, n_labels, *args, **kwargs):
         super().__init__(*args, **kwargs)

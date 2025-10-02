@@ -1,6 +1,6 @@
 model:
   base_learning_rate: 4.5e-06
-  target: taming.models.vqgan.VQGANSegmentationModel
+  target: taming.models.vqgan.VQSegmentationModel
   params:
     embed_dim: 256
     n_embed: 1024
@@ -25,9 +25,13 @@ model:
       dropout: 0.0
 
     lossconfig:
-      target: taming.modules.losses.segmentation.CELossWithQuant
+      target: taming.modules.losses.segmentation.BaseLossWithDiscriminator
       params:
-        codebook_weight: 1.0
+        base_loss_target: taming.modules.losses.segmentation.CELossWithQuant
+        base_loss_params:
+          codebook_weight: 1.0
+        disc_in_channels: 183
+        disc_start: 2000 # roughly 1 epoch at batch_size = 48
 
 data:
   target: main.DataModuleFromConfig
