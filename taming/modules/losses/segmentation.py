@@ -102,6 +102,7 @@ class FocalLossWithQuant(nn.Module):
             self.register_buffer('alpha', alpha)
         else:
             self.alpha = None
+        print(f"FocalLossWithQuant running with gamma={self.gamma} and alpha={self.alpha}")
 
     def forward(self, qloss, target, prediction, split):
         target_indices = torch.argmax(target, dim=1)
