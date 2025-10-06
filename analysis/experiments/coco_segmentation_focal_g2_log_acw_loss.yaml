@@ -30,7 +30,7 @@ model:
       target: taming.modules.losses.segmentation.FocalLossWithQuant
       params:
         codebook_weight: 1.0
-        gamma: 5.0
+        gamma: 2.0
         alpha: ${class_weights}
 
 data:
