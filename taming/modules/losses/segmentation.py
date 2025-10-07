@@ -266,6 +266,36 @@ class CELovaszSoftmaxWithQuant(nn.Module):
         return x != x
 
 
+class FocalTverskyLossWithQuant(nn.Module):
+    def __init__(self, codebook_weight=1.0, alpha=0.7, beta=0.3, gamma=4/3, smooth=1):
+        super().__init__()
+        self.codebook_weight = codebook_weight
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.smooth = smooth
+
+    def forward(self, qloss, target, prediction, split):
+        probs = F.softmax(prediction, dim=1)
+
+        dims = tuple(range(2, prediction.ndimension()))
+        TP = (probs * target).sum(dims)
+        FP = ((1 - target) * probs).sum(dims)
+        FN = (target * (1 - probs)).sum(dims)
+
+        Tversky = (TP + self.smooth) / (TP + self.alpha * FP + self.beta * FN + self.smooth)
+        FocalTversky = (1 - Tversky) ** self.gamma
+        focal_tversky_loss = FocalTversky.mean()
+
+        loss = focal_tversky_loss + self.codebook_weight * qloss
+
+        log_dict = {
+            f"{split}/total_loss": loss.clone().detach().mean(),
+            f"{split}/focal_tversky_loss": focal_tversky_loss.detach(),
+            f"{split}/quant_loss": qloss.detach().mean()
+        }
+        return loss, log_dict
+
 
 class BaseLossWithDiscriminator(nn.Module):
     def __init__(
