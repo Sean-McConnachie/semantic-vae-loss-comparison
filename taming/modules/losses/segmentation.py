@@ -13,6 +13,23 @@ from taming.modules.losses.vqperceptual import vanilla_d_loss, hinge_d_loss, ado
 from taming.modules.discriminator.model import NLayerDiscriminator, weights_init
 
 
+def compute_dice_loss(probs, target, num_classes, smooth):
+    dice_score = 0.0
+    for i in range(num_classes):
+        p_class = probs[:, i]
+        t_class = target[:, i]
+
+        intersection = (p_class * t_class).sum()
+        union = p_class.sum() + t_class.sum()
+
+        class_score = (2. * intersection + smooth) / (union + smooth)
+        dice_score += class_score
+
+    mean_dice_score = dice_score / num_classes
+    dice_loss = 1 - mean_dice_score
+    return dice_loss
+
+
 class BCELoss(nn.Module):
     def forward(self, prediction, target):
         loss = F.binary_cross_entropy_with_logits(prediction,target)
@@ -68,22 +85,8 @@ class CEDiceLossWithQuant(nn.Module):
         ce_loss = F.cross_entropy(prediction, target_indices)
 
         probs = F.softmax(prediction, dim=1)
-        target_one_hot = F.one_hot(target_indices, num_classes=self.num_classes)
-        target_one_hot = torch.moveaxis(target_one_hot, -1, 1).float()
 
-        dice_score = 0.0
-        for i in range(self.num_classes):
-            p_class = probs[:, i]
-            t_class = target_one_hot[:, i]
-
-            intersection = (p_class * t_class).sum()
-            union = p_class.sum() + t_class.sum()
-
-            class_score = (2. * intersection + self.smooth) / (union + self.smooth)
-            dice_score += class_score
-
-        mean_dice_score = dice_score / self.num_classes
-        dice_loss = 1 - mean_dice_score
+        dice_loss = compute_dice_loss(probs, target, self.num_classes, self.smooth)
 
         ce_dice_loss = (self.ce_weight * ce_loss) + (self.dice_weight * dice_loss)
 
@@ -292,6 +295,34 @@ class FocalTverskyLossWithQuant(nn.Module):
         log_dict = {
             f"{split}/total_loss": loss.clone().detach().mean(),
             f"{split}/focal_tversky_loss": focal_tversky_loss.detach(),
+            f"{split}/quant_loss": qloss.detach().mean()
+        }
+        return loss, log_dict
+
+
+class LogCoshDiceLossWithQuant(nn.Module):
+    """
+    https://arxiv.org/pdf/2006.14822
+    """
+    def __init__(self, codebook_weight=1.0, smooth=1e-6, num_classes=None):
+        super().__init__()
+        self.codebook_weight = codebook_weight
+        self.smooth = smooth
+        self.num_classes = num_classes
+        if num_classes is None:
+            raise ValueError("num_classes must be specified.")
+        
+    def forward(self, qloss, target, prediction, split):
+        probs = F.softmax(prediction, dim=1)
+
+        dice_loss = compute_dice_loss(probs, target, num_classes=self.num_classes, smooth=self.smooth)
+        log_cosh_dice_loss = torch.log((torch.exp(dice_loss) + torch.exp(-dice_loss)) / 2.0)
+
+        loss = log_cosh_dice_loss + self.codebook_weight * qloss
+
+        log_dict = {
+            f"{split}/total_loss": loss.clone().detach().mean(),
+            f"{split}/log_cosh_dice_loss": log_cosh_dice_loss.detach(),
             f"{split}/quant_loss": qloss.detach().mean()
         }
         return loss, log_dict

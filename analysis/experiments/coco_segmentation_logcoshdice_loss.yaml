@@ -25,13 +25,11 @@ model:
       dropout: 0.0
 
     lossconfig:
-      target: taming.modules.losses.segmentation.FocalTverskyLossWithQuant
+      target: taming.modules.losses.segmentation.LogCoshDiceLossWithQuant
       params:
         codebook_weight: 1.0
-        alpha: 1.0
-        beta: 1.0
-        gamma: 1.3333333
-        smooth: 1
+        num_classes: 183
+        smooth: 1e-6
 
 data:
   target: main.DataModuleFromConfig
