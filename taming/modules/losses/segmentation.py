@@ -300,6 +300,40 @@ class FocalTverskyLossWithQuant(nn.Module):
         return loss, log_dict
 
 
+class CEFocalTverskyLossWithQuant(nn.Module):
+    def __init__(self, ce_weight=1.0, codebook_weight=1.0, alpha=0.7, beta=0.3, gamma=4/3, smooth=1):
+        super().__init__()
+        self.ce_weight = ce_weight
+        self.codebook_weight = codebook_weight
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+        self.smooth = smooth
+
+    def forward(self, qloss, target, prediction, split):
+        target_indices = torch.argmax(target, dim=1)
+        ce_loss = F.cross_entropy(prediction, target_indices)
+        probs = F.softmax(prediction, dim=1)
+
+        dims = tuple(range(2, prediction.ndimension()))
+        TP = (probs * target).sum(dims)
+        FP = ((1 - target) * probs).sum(dims)
+        FN = (target * (1 - probs)).sum(dims)
+
+        Tversky = (TP + self.smooth) / (TP + self.alpha * FP + self.beta * FN + self.smooth)
+        FocalTversky = (1 - Tversky) ** self.gamma
+        focal_tversky_loss = FocalTversky.mean()
+
+        loss = focal_tversky_loss + self.codebook_weight * qloss + self.ce_weight * ce_loss
+
+        log_dict = {
+            f"{split}/total_loss": loss.clone().detach().mean(),
+            f"{split}/focal_tversky_loss": focal_tversky_loss.detach(),
+            f"{split}/quant_loss": qloss.detach().mean()
+        }
+        return loss, log_dict
+
+
 class LogCoshDiceLossWithQuant(nn.Module):
     """
     https://arxiv.org/pdf/2006.14822
