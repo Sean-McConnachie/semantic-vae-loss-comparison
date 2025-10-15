@@ -25,7 +25,7 @@ model:
       dropout: 0.0
 
     lossconfig:
-      target: taming.modules.losses.segmentation.CELovaszSoftmaxWithQuant
+      target: analysis.losses.CELovaszSoftmaxWithQuant
       params:
         codebook_weight: 1.0
         lovasz_weight: 1.0

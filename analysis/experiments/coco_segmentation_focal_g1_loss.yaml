@@ -25,7 +25,7 @@ model:
       dropout: 0.0
 
     lossconfig:
-      target: taming.modules.losses.segmentation.FocalLossWithQuant
+      target: analysis.losses.FocalLossWithQuant
       params:
         codebook_weight: 1.0
         gamma: 1.0
